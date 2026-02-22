@@ -1,1 +1,10 @@
-pip freeze > requirements.txt
+pandas
+numpy
+scikit-learn
+nltk
+matplotlib
+seaborn
+streamlit
+joblib
+Pillow
+sqlalchemy
