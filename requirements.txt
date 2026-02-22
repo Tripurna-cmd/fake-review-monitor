@@ -4,7 +4,8 @@ scikit-learn
 nltk
 matplotlib
 seaborn
-streamlit
+streamlit==1.32.0
+altair==4.2.2
 joblib
 Pillow
 sqlalchemy
