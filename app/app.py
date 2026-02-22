@@ -48,8 +48,8 @@ with st.sidebar:
     page = st.radio("📌 Navigate", [
         "🏠 Home — Analyze Review",
         "📊 Model Evaluation",
+        "📈 Metrics Analysis",
         "🗄️ Review History"
-        
     ])
 
     st.markdown("---")
@@ -233,3 +233,116 @@ elif page == "🗄️ Review History":
     else:
         st.info("No reviews analyzed yet. Go to Home and analyze some reviews first!")
 
+# ─── PAGE: METRICS ANALYSIS ────────────────────────────
+elif page == "📈 Metrics Analysis":
+    st.title("📈 Intermediate Model Metrics Analysis")
+    st.markdown("---")
+
+    # Load tuning results
+    import joblib
+    import os
+
+    st.markdown("### 🔧 Hyperparameter Tuning Results")
+
+    if os.path.exists('models/tuning_results.pkl'):
+        tuning = joblib.load('models/tuning_results.pkl')
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Baseline Accuracy",
+                    f"{tuning['baseline_accuracy']*100:.2f}%")
+        col2.metric("Tuned Accuracy",
+                    f"{tuning['tuned_accuracy']*100:.2f}%",
+                    delta=f"+{(tuning['tuned_accuracy']-tuning['baseline_accuracy'])*100:.2f}%")
+        col3.metric("Best C Parameter",
+                    tuning['best_params']['C'])
+
+        st.markdown("### ⚙️ Best Parameters Found")
+        params_df = pd.DataFrame([tuning['best_params']])
+        st.dataframe(params_df, use_container_width=True)
+
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### 📊 Baseline vs Tuned Accuracy")
+        labels  = ['Baseline LR\n89.77%', 'Tuned LR\n90.52%']
+        values  = [89.77, 90.52]
+        colors  = ['#4b9eff', '#ff4b4b']
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        bars = ax.bar(labels, values, color=colors, edgecolor='white', width=0.4)
+        ax.set_ylim(85, 95)
+        ax.set_ylabel('Accuracy (%)', color='white')
+        ax.set_title('Baseline vs Tuned Model', color='white')
+        ax.tick_params(colors='white')
+        ax.set_facecolor('#1e2130')
+        fig.patch.set_facecolor('#1e2130')
+        for bar, val in zip(bars, values):
+            ax.text(bar.get_x() + bar.get_width()/2,
+                    bar.get_height() + 0.1,
+                    f'{val}%', ha='center',
+                    color='white', fontweight='bold')
+        st.pyplot(fig)
+
+    with col2:
+        st.markdown("### 📊 All Models Comparison")
+        if os.path.exists('models/model_comparison.png'):
+            from PIL import Image
+            img = Image.open('models/model_comparison.png')
+            st.image(img, use_column_width=True)
+
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### 📉 Precision vs Recall vs F1")
+        metrics_data = {
+            'Model'    : ['Logistic Reg', 'Random Forest', 'Gradient Boost', 'Tuned LR'],
+            'Precision': [0.90, 0.86, 0.78, 0.91],
+            'Recall'   : [0.90, 0.86, 0.78, 0.91],
+            'F1-Score' : [0.90, 0.86, 0.78, 0.91],
+        }
+        metrics_df = pd.DataFrame(metrics_data)
+
+        fig3, ax3 = plt.subplots(figsize=(6, 4))
+        x     = range(len(metrics_df['Model']))
+        width = 0.25
+        ax3.bar([i - width for i in x], metrics_df['Precision'],
+                width, label='Precision', color='#4b9eff')
+        ax3.bar([i for i in x], metrics_df['Recall'],
+                width, label='Recall',    color='#4bff91')
+        ax3.bar([i + width for i in x], metrics_df['F1-Score'],
+                width, label='F1-Score',  color='#ff4b4b')
+        ax3.set_xticks(x)
+        ax3.set_xticklabels(metrics_df['Model'], rotation=15,
+                            color='white', fontsize=8)
+        ax3.set_ylim(0.6, 1.0)
+        ax3.set_ylabel('Score', color='white')
+        ax3.set_title('Precision vs Recall vs F1', color='white')
+        ax3.tick_params(colors='white')
+        ax3.legend(facecolor='#1e2130', labelcolor='white')
+        ax3.set_facecolor('#1e2130')
+        fig3.patch.set_facecolor('#1e2130')
+        st.pyplot(fig3)
+
+    with col2:
+        st.markdown("### 🖼️ Confusion Matrix")
+        if os.path.exists('models/confusion_matrix.png'):
+            from PIL import Image
+            img2 = Image.open('models/confusion_matrix.png')
+            st.image(img2, use_column_width=True)
+
+    st.markdown("---")
+    st.markdown("### 📋 Full Metrics Table")
+    full_metrics = {
+        'Model'     : ['Logistic Regression', 'Random Forest',
+                       'Gradient Boosting',   'Tuned LR (Final)'],
+        'Accuracy'  : ['89.77%', '86.18%', '77.94%', '90.52%'],
+        'Precision' : ['90%',    '86%',    '78%',    '91%'],
+        'Recall'    : ['90%',    '86%',    '78%',    '91%'],
+        'F1-Score'  : ['90%',    '86%',    '78%',    '91%'],
+        'Status'    : ['Baseline', 'Baseline', 'Baseline', '✅ Best Model']
+    }
+    st.dataframe(pd.DataFrame(full_metrics), use_container_width=True)
