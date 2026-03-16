@@ -3,8 +3,7 @@ import joblib
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import (accuracy_score, classification_report,
                              confusion_matrix, ConfusionMatrixDisplay)
 
@@ -16,11 +15,16 @@ def train():
     X = df['cleaned_text']
     y = df['label_encoded']
 
-    print(f"✅ Dataset loaded: {X.shape[0]} reviews")
+    print(f"✅ Dataset loaded  : {X.shape[0]} reviews")
+    print(f"Fake reviews (CG) : {y.sum()}")
+    print(f"Real reviews (OR) : {(y==0).sum()}")
 
+    # Train test split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
+    print(f"\nTraining samples : {len(X_train)}")
+    print(f"Testing samples  : {len(X_test)}")
 
     # TF-IDF Vectorization
     print("\n⏳ Applying TF-IDF Vectorization...")
@@ -29,52 +33,32 @@ def train():
     X_test_vec  = vectorizer.transform(X_test)
     print("✅ Vectorization complete!")
 
-    # ── BASELINE MODELS ──────────────────────────────
-    models = {
-        'Logistic Regression' : LogisticRegression(max_iter=1000),
-        'Random Forest'       : RandomForestClassifier(n_estimators=100, random_state=42),
-        'Gradient Boosting'   : GradientBoostingClassifier(n_estimators=100, random_state=42)
-    }
-
-    results      = {}
-    best_model   = None
-    best_name    = ''
-    best_acc     = 0
-
+    # ── BASELINE NAIVE BAYES ─────────────────────────
     print("\n" + "="*55)
-    print("        BASELINE MODEL TRAINING")
+    print("      BASELINE MULTINOMIAL NAIVE BAYES")
     print("="*55)
 
-    for name, model in models.items():
-        print(f"\n⏳ Training {name}...")
-        model.fit(X_train_vec, y_train)
-        preds    = model.predict(X_test_vec)
-        accuracy = accuracy_score(y_test, preds)
-        results[name] = accuracy
-        print(f"✅ {name} Accuracy: {accuracy*100:.2f}%")
-        print(classification_report(y_test, preds,
-              target_names=['Real (OR)', 'Fake (CG)']))
-        if accuracy > best_acc:
-            best_acc   = accuracy
-            best_model = model
-            best_name  = name
+    baseline_nb    = MultinomialNB()
+    baseline_nb.fit(X_train_vec, y_train)
+    baseline_preds = baseline_nb.predict(X_test_vec)
+    baseline_acc   = accuracy_score(y_test, baseline_preds)
 
-    print(f"\n🏆 Best Baseline: {best_name} — {best_acc*100:.2f}%")
+    print(f"✅ Baseline Naive Bayes Accuracy: {baseline_acc*100:.2f}%")
+    print(classification_report(y_test, baseline_preds,
+          target_names=['Real (OR)', 'Fake (CG)']))
 
     # ── HYPERPARAMETER TUNING ─────────────────────────
     print("\n" + "="*55)
-    print("     HYPERPARAMETER TUNING (GridSearchCV)")
+    print("   HYPERPARAMETER TUNING — Multinomial Naive Bayes")
     print("="*55)
-    print("⏳ Tuning Logistic Regression... please wait...")
+    print("⏳ Tuning with GridSearchCV... please wait...")
 
     param_grid = {
-        'C'       : [0.1, 1, 10],
-        'solver'  : ['lbfgs', 'liblinear'],
-        'max_iter': [500, 1000]
+        'alpha': [0.01, 0.1, 0.5, 1.0, 2.0, 5.0]
     }
 
     grid = GridSearchCV(
-        LogisticRegression(),
+        MultinomialNB(),
         param_grid,
         cv      = 5,
         scoring = 'accuracy',
@@ -83,59 +67,75 @@ def train():
     )
     grid.fit(X_train_vec, y_train)
 
-    tuned_model    = grid.best_estimator_
-    tuned_preds    = tuned_model.predict(X_test_vec)
-    tuned_accuracy = accuracy_score(y_test, tuned_preds)
+    tuned_nb    = grid.best_estimator_
+    tuned_preds = tuned_nb.predict(X_test_vec)
+    tuned_acc   = accuracy_score(y_test, tuned_preds)
 
-    print(f"\n✅ Best Parameters : {grid.best_params_}")
-    print(f"✅ Tuned Accuracy  : {tuned_accuracy*100:.2f}%")
-    print(f"✅ Improvement     : +{(tuned_accuracy - best_acc)*100:.2f}%")
+    print(f"\n✅ Best Alpha Parameter : {grid.best_params_['alpha']}")
+    print(f"✅ Baseline Accuracy    : {baseline_acc*100:.2f}%")
+    print(f"✅ Tuned Accuracy       : {tuned_acc*100:.2f}%")
+    print(f"✅ Improvement          : +{(tuned_acc-baseline_acc)*100:.2f}%")
 
-    # Save tuning results
+    print(f"\n📊 Tuned Naive Bayes Classification Report:")
+    print(classification_report(y_test, tuned_preds,
+          target_names=['Real (OR)', 'Fake (CG)']))
+
+    # ── SAVE MODEL & VECTORIZER ───────────────────────
+    print("\n⏳ Saving model and vectorizer...")
+    joblib.dump(tuned_nb,   'models/best_model.pkl')
+    joblib.dump(vectorizer, 'models/vectorizer.pkl')
+
     tuning_results = {
-        'best_params'       : grid.best_params_,
-        'baseline_accuracy' : best_acc,
-        'tuned_accuracy'    : tuned_accuracy,
-        'all_results'       : results
+        'model_name'       : 'Multinomial Naive Bayes',
+        'best_params'      : grid.best_params_,
+        'baseline_accuracy': baseline_acc,
+        'tuned_accuracy'   : tuned_acc,
     }
     joblib.dump(tuning_results, 'models/tuning_results.pkl')
-    joblib.dump(tuned_model,    'models/best_model.pkl')
-    joblib.dump(vectorizer,     'models/vectorizer.pkl')
 
-    print("\n✅ Model saved to models/best_model.pkl")
-    print("✅ Vectorizer saved to models/vectorizer.pkl")
-    print("✅ Tuning results saved to models/tuning_results.pkl")
+    print("✅ Model saved     : models/best_model.pkl")
+    print("✅ Vectorizer saved: models/vectorizer.pkl")
+    print("✅ Tuning results  : models/tuning_results.pkl")
 
     # ── CONFUSION MATRIX ─────────────────────────────
+    print("\n⏳ Generating Confusion Matrix...")
     cm   = confusion_matrix(y_test, tuned_preds)
-    disp = ConfusionMatrixDisplay(cm, display_labels=['Real', 'Fake'])
+    disp = ConfusionMatrixDisplay(cm,
+           display_labels=['Real', 'Fake'])
     disp.plot(cmap='Blues')
-    plt.title("Confusion Matrix — Tuned Logistic Regression")
+    plt.title("Confusion Matrix — Tuned Multinomial Naive Bayes")
     plt.savefig('models/confusion_matrix.png')
     plt.close()
     print("✅ Confusion matrix saved!")
 
-    # ── MODEL COMPARISON CHART ────────────────────────
-    all_models = list(results.keys()) + ['Tuned LR']
-    all_scores = [v*100 for v in results.values()] + [tuned_accuracy*100]
-    colors     = ['#4b9eff', '#4bff91', '#ffaa00', '#ff4b4b']
+    # ── ACCURACY COMPARISON CHART ─────────────────────
+    print("\n⏳ Generating Accuracy Chart...")
+    labels = ['Baseline\nNaive Bayes', 'Tuned\nNaive Bayes']
+    values = [baseline_acc*100, tuned_acc*100]
+    colors = ['#4b9eff', '#ff4b4b']
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    bars = ax.bar(all_models, all_scores, color=colors, edgecolor='white')
+    fig, ax = plt.subplots(figsize=(6, 4))
+    bars = ax.bar(labels, values, color=colors,
+                  edgecolor='white', width=0.4)
     ax.set_ylim(60, 100)
     ax.set_ylabel('Accuracy (%)')
-    ax.set_title('Model Comparison — Baseline vs Tuned')
-    for bar, score in zip(bars, all_scores):
+    ax.set_title('Baseline vs Tuned Naive Bayes')
+    for bar, val in zip(bars, values):
         ax.text(bar.get_x() + bar.get_width()/2,
                 bar.get_height() + 0.3,
-                f'{score:.2f}%', ha='center', fontweight='bold')
+                f'{val:.2f}%', ha='center',
+                fontweight='bold')
     plt.tight_layout()
     plt.savefig('models/model_comparison.png')
     plt.close()
-    print("✅ Model comparison chart saved!")
+    print("✅ Accuracy chart saved!")
 
-    print("\n🎉 Training + Tuning Complete!")
-    print(f"🏆 Final Model Accuracy: {tuned_accuracy*100:.2f}%")
+    print("\n" + "="*55)
+    print("🎉 Training Complete!")
+    print(f"🏆 Model    : Tuned Multinomial Naive Bayes")
+    print(f"🏆 Alpha    : {grid.best_params_['alpha']}")
+    print(f"🏆 Accuracy : {tuned_acc*100:.2f}%")
+    print("="*55)
 
 if __name__ == '__main__':
     train()
